@@ -9,7 +9,9 @@ proxy to view comics(manga) as webdav service
 * wsgidav (webdav server)
 * beautifulsoup
 
-  ~ $ pip install wsgidav beautifulsoup
+```bash
+$ pip install wsgidav beautifulsoup
+```
 
 ### 2. run server
 
@@ -17,18 +19,20 @@ proxy to view comics(manga) as webdav service
   - port number
   - user & password
 
-  ~ $ wsgidav --config=./wsgidav.conf
+```bash
+$ wsgidav --config=./wsgidav.conf
+```
 
 ### 3. connect to server
 
 access the following web page to test
 
-  http://localhost:8080/mangafox/
+    http://localhost:8080/mangafox/
 
 ### 4. recommended clients
 
 * iOS
-  - comicglass ($ for streaming feature)
+  - comicglass ($ to support streaming)
   - aircomix ($ to remove ad)
 * Android
   - aircomix ($ to remove ad)
@@ -39,6 +43,4 @@ access the following web page to test
 ## Supported Sites & its webdav root folders
 
 * mangafox.me (/mangafox)
-* zangsisi.net (/zangsisi)
 * hitomi.la (/hitomi)
-
