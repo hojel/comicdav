@@ -22,7 +22,7 @@ PTN_IMAGE   = re.compile('"name":"(.*?)"')
 PTN_GALID   = re.compile("(\d+)\.html")
 
 #===============================================================================
-# Virtual Collection
+# Browser
 #===============================================================================
 class RootCollection(DAVCollection):
     """Resolve top-level requests '/'."""
@@ -37,7 +37,7 @@ class RootCollection(DAVCollection):
         # Handle visible categories and also /by_key/...
         if name == "by_language":
             return LanguageCollection(joinUri(self.path, name), self.environ)
-        return None
+        return []
 
 
 class LanguageCollection(DAVCollection):
@@ -55,7 +55,7 @@ class LanguageCollection(DAVCollection):
     def getMember(self, name):
         if name in self._languages:
             return PageCollection(joinUri(self.path, name), self.environ, "index")
-        return None
+        return []
 
 
 class PageCollection(DAVCollection):
@@ -65,7 +65,7 @@ class PageCollection(DAVCollection):
         self.list_type = list_type
     
     def getDisplayInfo(self):
-        return {"type": "List"}
+        return {"type": "Directory"}
     
     def getMemberNames(self):
         return map(str, range(1, 101))
@@ -73,8 +73,8 @@ class PageCollection(DAVCollection):
     def getMember(self, name):
         if int(name) <= 100:
             return GListCollection(joinUri(self.path, name), self.environ, self.list_type)
-        _logger.error("expect number as page('%s')" % name)
-        return None
+        _logger.warning("expect number as page('%s')" % name)
+        return []
 
 #===============================================================================
 # GListCollection
@@ -88,29 +88,34 @@ class GListCollection(DAVCollection):
         self.galleries = None
     
     def getDisplayInfo(self):
-        return {"type": "Page"}
+        return {"type": "List"}
     
     def getMemberNames(self):
         if self.galleries is None:
-            _logger.debug("GList('%s')" % self.url)
-            html = urllib2.urlopen(self.url).read()
-            self.galleries = PTN_GALLERY.findall(html)
-        return ["%s___%s" % (gname, gid) for gid, gname in self.galleries]
+            self.parseSite()
+        return [gname for gid, gname in self.galleries]
     
     def getMember(self, name):
-        if not '___' in name:
-            _logger.error("unexpected name in GList('%s')" % name)
-            return None
-        gid = name.rsplit('___', 1)[-1]
-        url = ROOT_URL+"/galleries/%s.html" % gid
-        return GalleryCollection(joinUri(self.path, name), self.environ, url)
+        if self.galleries is None:
+            self.parseSite()
+        for gid, gname in self.galleries:
+            if gname == name:
+                url = ROOT_URL+"/galleries/%s.html" % gid
+                return GalleryCollection(joinUri(self.path, name), self.environ, url)
+        _logger.warning("unexpected name, %s" % name)
+        return []
+
+    def parseSite(self):
+        _logger.debug("GList('%s')" % self.url)
+        html = urllib2.urlopen(self.url).read()
+        self.galleries = PTN_GALLERY.findall(html)
 
 
 #===============================================================================
 # GalleryCollection
 #===============================================================================
 class GalleryCollection(DAVCollection):
-    """a collection of images."""
+    """Resolve '/by_language/korean/1/title___100' URLs"""
 
     def __init__(self, path, environ, url):
         DAVCollection.__init__(self, path, environ)
@@ -168,25 +173,13 @@ class ImageFile(DAVNonCollection):
 
          
 #===============================================================================
-# HitomiProvider
+# DAVProvider
 #===============================================================================
 class HitomiProvider(DAVProvider):
-    """
-    DAV provider that serves a VirtualResource derived structure.
-    """
     def __init__(self):
         super(HitomiProvider, self).__init__()
 
     def getResourceInst(self, path, environ):
-        """Return _Hitomi object for path.
-        
-        path is expected to be 
-            categoryType/category/name/artifact
-        for example:
-            'by_tag/cool/My doc 2/info.html'
-
-        See DAVProvider.getResourceInst()
-        """
         _logger.info("getResourceInst('%s')" % path)
         self._count_getResourceInst += 1
         root = RootCollection(environ)
