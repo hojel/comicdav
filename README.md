@@ -1,6 +1,6 @@
 # comicdav
 
-proxy to view comics(manga) as webdav service
+proxy to view comics(manga) as webdav file
 
 ## How to use
 
@@ -8,9 +8,10 @@ proxy to view comics(manga) as webdav service
 
 * wsgidav (webdav server)
 * beautifulsoup
+* js2py
 
 ```bash
-$ pip install wsgidav beautifulsoup
+$ pip install wsgidav beautifulsoup js2py
 ```
 
 ### 2. run server
@@ -42,5 +43,7 @@ access the following web page to test
 
 ## Supported Sites & its webdav root folders
 
-* mangafox.me (/mangafox)
+* ~~mangafox.me (/mangafox)~~
+* mangapanda.com (/mangapanda)
 * hitomi.la (/hitomi)
+* marumaru.in (/marumaru)

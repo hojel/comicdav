@@ -115,7 +115,7 @@ class GListCollection(DAVCollection):
 # GalleryCollection
 #===============================================================================
 class GalleryCollection(DAVCollection):
-    """Resolve '/by_language/korean/1/title___100' URLs"""
+    """Resolve '/by_language/korean/1/title' URLs"""
 
     def __init__(self, path, environ, url):
         DAVCollection.__init__(self, path, environ)
