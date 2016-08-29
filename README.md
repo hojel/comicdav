@@ -1,6 +1,10 @@
 # comicdav
 
-proxy to view comics(manga) as webdav file
+Virtual WebDAV server for comic(manga) sites that allows the user to navigate the site in WebDAV structure.
+
+There are many web sites that provide scanned comic images, but they are inconvinient to read in web page.<br/>
+And also there are some comic readers designed for mobile devices that can access remote files in WebDAV server.<br/>
+This virtual server gives benefit for the user to view comics with his favorite reader.
 
 ## How to use
 
