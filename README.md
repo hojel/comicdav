@@ -18,7 +18,8 @@ $ pip install wsgidav beautifulsoup js2py
 
 * modify wsgidav configuration file to change the followings:
   - port number
-  - user & password
+  - set username & password
+  - set debug log
 
 ```bash
 $ wsgidav --config=./wsgidav.conf
@@ -28,22 +29,23 @@ $ wsgidav --config=./wsgidav.conf
 
 access the following web page to test
 
-    http://localhost:8080/mangafox/
+    http://localhost:8080/mangapanda/
 
 ### 4. recommended clients
 
 * iOS
-  - comicglass ($ to support streaming)
-  - aircomix ($ to remove ad)
+  - aircomix ($ for ad free version)
+  - comicglass ($ + $ for streaming)
 * Android
   - aircomix ($ to remove ad)
+  - comic reader mobi ($$)
 * Windows
   - no comic reader supporting webdav streaming yet
   - mount a related webdav folder as a drive first
 
-## Supported Sites & its webdav root folders
+## Supported sites & its webdav root folders
 
 * ~~mangafox.me (/mangafox)~~
 * mangapanda.com (/mangapanda)
-* hitomi.la (/hitomi)
 * marumaru.in (/marumaru)
+* hitomi.la (/hitomi)
