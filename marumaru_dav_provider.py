@@ -30,6 +30,26 @@ req_hdrs = {
 #===============================================================================
 class RootCollection(DAVCollection):
     """Resolve top-level requests '/'."""
+    def __init__(self, environ):
+        DAVCollection.__init__(self, "/", environ)
+        
+    def getMemberNames(self):
+        return ["by_board", "by_genre", ]
+    
+    def getMember(self, name):
+        # Handle visible categories and also /by_key/...
+        if name == "by_board":
+            return BoardCollection(joinUri(self.path, name), self.environ)
+        elif name == "by_genre":
+            return GenreCollection(joinUri(self.path, name), self.environ)
+        _logger.error("unexpected member name, "+name)
+        return None
+
+#===============================================================================
+# Board
+#===============================================================================
+class BoardCollection(DAVCollection):
+    """Resolve top-level requests '/'."""
     btable = [
         ("update", 44),
         ("weekly",   28),
@@ -41,19 +61,43 @@ class RootCollection(DAVCollection):
         ("short",27),
         ]
     
-    def __init__(self, environ):
-        DAVCollection.__init__(self, "/", environ)
+    def __init__(self, path, environ):
+        DAVCollection.__init__(self, path, environ)
         
     def getMemberNames(self):
         return [tname for tname,_ in self.btable]
     
     def getMember(self, name):
-        # Handle visible categories and also /by_key/...
         for tname, tid in self.btable:
             if tname == name:
                 url = ROOT_URL + "/?c=1/%d" % tid
+                url += "&sort=gid"
                 return ListPageCollection(joinUri(self.path, name), self.environ, url)
+        _logger.error("unexpected member name, "+name)
         return None
+
+
+#===============================================================================
+# Genre
+#===============================================================================
+class GenreCollection(DAVCollection):
+    """Resolve top-level requests '/'."""
+    genres = ["17", "SF", "TS", "개그", "드라마",
+              "러브코미디", "먹방", "백합", "붕탁", "순정",
+              "스릴러", "스포츠", "시대", "액션", "일상+치유",
+              "추리", "판타지", "학원", "호러"
+             ]
+    
+    def __init__(self, path, environ):
+        DAVCollection.__init__(self, path, environ)
+        
+    def getMemberNames(self):
+        return self.genres
+    
+    def getMember(self, name):
+        url = ROOT_URL + "/?r=home&m=bbs&bid=manga&where=tag&keyword=G%3A"+name.replace("+", "%2B") 
+        url += "&sort=gid"
+        return ListPageCollection(joinUri(self.path, name), self.environ, url)
 
 
 #===============================================================================
@@ -61,6 +105,8 @@ class RootCollection(DAVCollection):
 #===============================================================================
 class ListPageCollection(DAVCollection):
     """ site: /?c=1/{id}"""
+    maxpage = 100
+
     def __init__(self, path, environ, url):
         DAVCollection.__init__(self, path, environ)
         self.url = url
@@ -69,7 +115,7 @@ class ListPageCollection(DAVCollection):
         return {"type": "Pages"}
     
     def getMemberNames(self):
-        return map(str, range(1, 11))
+        return map(str, range(1, self.maxpage+1))
     
     def getMember(self, name):
         if name.isdigit():
@@ -93,18 +139,18 @@ class ListCollection(DAVCollection):
     
     def getMemberNames(self):
         if self.series is None:
-            self.parseSite()
+            self.extractInfo()
         return [title for title,_ in self.series]
     
     def getMember(self, name):
         if self.series is None:
-            self.parseSite()
+            self.extractInfo()
         for title, url in self.series:
             if title == name:
                 return SeriesCollection(joinUri(self.path, name), self.environ, url)
         return None
 
-    def parseSite(self):
+    def extractInfo(self):
         _logger.debug(self.url)
         req = urllib2.Request(self.url, headers=req_hdrs)
         html = urllib2.urlopen(req).read()
@@ -130,25 +176,26 @@ class SeriesCollection(DAVCollection):
     
     def getMemberNames(self):
         if self.episodes is None:
-            self.parseSite()
+            self.extractInfo()
         return [title for title,_ in self.episodes]
     
     def getMember(self, name):
         if self.episodes is None:
-            self.parseSite()
+            self.extractInfo()
         for title, url in self.episodes:
             if title == name:
                 return EpisodeCollection(joinUri(self.path, name), self.environ, url)
         return None
 
-    def parseSite(self):
+    def extractInfo(self):
         _logger.debug(self.url)
         req = urllib2.Request(self.url, headers=req_hdrs)
         html = urllib2.urlopen(req).read()
         soup = BeautifulSoup(html)
         self.episodes = []
         for node in soup.findAll('a', {'href':re.compile("/archives/")}):
-            title = str(node.string)
+            #title = str(node.string)
+            title = unicode(node.text).encode('utf-8')
             url = node.get('href')
             self.episodes.append( (title, url) )
 
@@ -158,7 +205,9 @@ class EpisodeCollection(DAVCollection):
 
     def __init__(self, path, environ, url):
         DAVCollection.__init__(self, path, environ)
-        self.url = url.replace("http://www.shencomics.com", "http://blog.yuncomics.com")
+        url = url.replace("http://www.shencomics.com", "http://blog.yuncomics.com")
+        url = url.replace("http://www.yuncomics.com", "http://blog.yuncomics.com")
+        self.url = url
         self.cookie = None
         self.imgurls = None
     
@@ -167,19 +216,26 @@ class EpisodeCollection(DAVCollection):
     
     def getMemberNames(self):
         if self.imgurls is None:
-            self.parseSite()
-        return [self.basename(url) for url in self.imgurls]
+            self.extractInfo()
+        #return [self.basename(url) for url in self.imgurls]
+        return ["%s.jpg" % cnt for cnt in range(1, len(self.imgurls)+1)]
     
     def getMember(self, name):
         if self.imgurls is None:
-            self.parseSite()
+            self.extractInfo()
+        """ basename as image file name
         for url in self.imgurls:
             fname = self.basename(url)
             if fname == name:
                 return ImageFile(joinUri(self.path, name), self.environ, url, self.url, self.cookie)
         return None
+        """
+        """ counter as image file name """
+        idx = int(name.split('.')[0]) - 1
+        url = self.imgurls[idx]
+        return ImageFile(joinUri(self.path, name), self.environ, url, self.url, self.cookie)
 
-    def parseSite(self):
+    def extractInfo(self):
         _logger.debug(self.url)
         req = urllib2.Request(self.url, headers=req_hdrs)
         html = urllib2.urlopen(req).read()

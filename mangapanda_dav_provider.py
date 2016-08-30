@@ -117,19 +117,19 @@ class DirectoryCollection(DAVCollection):
     
     def getMemberNames(self):
         if self.mangas is None:
-            self.parseSite()
+            self.extractInfo()
         return self.mangas.keys()
     
     def getMember(self, name):
         if self.mangas is None:
-            self.parseSite()
-        if title, mid in self.mangas:
+            self.extractInfo()
+        if title in self.mangas:
             if title == name:
                 url = ROOT_URL + "/" + mid
                 return MangaCollection(joinUri(self.path, name), self.environ, url)
         return None
 
-    def parseSite(self):
+    def extractInfo(self):
         _logger.debug(self.url)
         html = urllib2.urlopen(self.url).read()
         soup = BeautifulSoup(html)
@@ -155,7 +155,7 @@ class MangaCollection(DAVCollection):
     
     def getMemberNames(self):
         if self.chapters is None:
-            self.parseSite()
+            self.extractInfo()
         return self.chapters
     
     def getMember(self, name):
@@ -165,7 +165,7 @@ class MangaCollection(DAVCollection):
         _logger.error("unexpected chapter name, "+name)
         return None
 
-    def parseSite(self):
+    def extractInfo(self):
         _logger.debug(self.url)
         html = urllib2.urlopen(self.url).read()
         soup = BeautifulSoup(html)
