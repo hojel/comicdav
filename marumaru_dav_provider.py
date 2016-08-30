@@ -25,6 +25,12 @@ req_hdrs = {
     "Cookie":"",
 }
 
+PTN_MAXPG   = re.compile('<a href="[^"]*p=(\d+)[^"]*"[^>]*> *<img src="[^"]*/lp.gif"')
+PTN_SRURL   = re.compile("goHref\('(.*?)'\)")
+PTN_ARCHIVE = re.compile("/archives/")
+PTN_IMGURL  = re.compile('data-src="(.*?)"')
+PTN_SUCURI  = re.compile("S\s*=\s*'([^']*)'")
+
 #===============================================================================
 # Virtual Collection
 #===============================================================================
@@ -105,16 +111,20 @@ class GenreCollection(DAVCollection):
 #===============================================================================
 class ListPageCollection(DAVCollection):
     """ site: /?c=1/{id}"""
-    maxpage = 100
-
     def __init__(self, path, environ, url):
         DAVCollection.__init__(self, path, environ)
         self.url = url
+        self.maxpage = 0
     
     def getDisplayInfo(self):
         return {"type": "Pages"}
     
     def getMemberNames(self):
+        req = urllib2.Request(self.url, headers=req_hdrs)
+        html = urllib2.urlopen(req).read()
+        match = PTN_MAXPG.search(html)
+        if match:
+            self.maxpage = int(match.group(1))
         return map(str, range(1, self.maxpage+1))
     
     def getMember(self, name):
@@ -127,8 +137,6 @@ class ListPageCollection(DAVCollection):
 
 class ListCollection(DAVCollection):
     """ site: /?c=1/{id}&p={num}"""
-    ptn_url = re.compile("goHref\('(.*?)'\)")
-
     def __init__(self, path, environ, url):
         DAVCollection.__init__(self, path, environ)
         self.url = url
@@ -158,7 +166,7 @@ class ListCollection(DAVCollection):
         self.series = []
         for node in soup.findAll('div', {'class':'list'}):
             title = str(node.find('span', {'class':'subject'}).string)
-            url = ROOT_URL + self.ptn_url.search(node['onclick']).group(1)
+            url = ROOT_URL + PTN_SRURL.search(node['onclick']).group(1)
             self.series.append( (title, url) )
 
 
@@ -193,7 +201,7 @@ class SeriesCollection(DAVCollection):
         html = urllib2.urlopen(req).read()
         soup = BeautifulSoup(html)
         self.episodes = []
-        for node in soup.findAll('a', {'href':re.compile("/archives/")}):
+        for node in soup.findAll('a', {'href':PTN_ARCHIVE}):
             #title = str(node.string)
             title = unicode(node.text).encode('utf-8')
             url = node.get('href')
@@ -201,8 +209,6 @@ class SeriesCollection(DAVCollection):
 
 
 class EpisodeCollection(DAVCollection):
-    ptn_sucuri = re.compile("S\s*=\s*'([^']*)'")
-
     def __init__(self, path, environ, url):
         DAVCollection.__init__(self, path, environ)
         url = url.replace("http://www.shencomics.com", "http://blog.yuncomics.com")
@@ -239,7 +245,7 @@ class EpisodeCollection(DAVCollection):
         _logger.debug(self.url)
         req = urllib2.Request(self.url, headers=req_hdrs)
         html = urllib2.urlopen(req).read()
-        match = self.ptn_sucuri.search(html)
+        match = PTN_SUCURI.search(html)
         if match:
             jsstr = base64.b64decode( match.group(1) )
             jsstr = jsstr.replace(";document.cookie", ";cookie")
@@ -249,7 +255,7 @@ class EpisodeCollection(DAVCollection):
             req_hdrs["Cookie"] = self.cookie
             req = urllib2.Request(self.url, headers=req_hdrs)
             html = urllib2.urlopen(req).read()
-        self.imgurls = re.compile('data-src="(.*?)"').findall(html)
+        self.imgurls = PTN_IMGURL.findall(html)
 
     @staticmethod
     def basename(url):
