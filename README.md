@@ -31,21 +31,11 @@ $ wsgidav --config=./wsgidav.conf
 
 ### 3. connect to server
 
-access the following web page to test
+access the following web page to test.
 
     http://localhost:8080/mangapanda/
 
-### 4. recommended clients
-
-* iOS
-  - aircomix ($ for ad free version)
-  - comicglass ($ + $ for streaming)
-* Android
-  - aircomix ($ to remove ad)
-  - comic reader mobi ($$)
-* Windows
-  - no comic reader supporting webdav streaming yet
-  - mount a related webdav folder as a drive first
+enjoy in your mobile device by using a comic reader that supports WebDAV streaming.
 
 ## Supported sites & its webdav root folders
 
