@@ -5,15 +5,20 @@ Proxy mangapanda.me as virtual DAV
 import urllib2
 import re
 from BeautifulSoup import BeautifulSoup
+from collections import OrderedDict
 from wsgidav.util import joinUri
 from wsgidav.dav_provider import DAVProvider, DAVNonCollection, DAVCollection
 from wsgidav.dav_error import DAVError, HTTP_FORBIDDEN, HTTP_INTERNAL_ERROR,\
     PRECONDITION_CODE_ProtectedProperty
 from wsgidav import util
+from lru import LRUCacheDict
 
 __docformat__ = "reStructuredText"
 
 _logger = util.getModuleLogger(__name__)
+
+_dircache = LRUCacheDict(max_size=10, expiration=30*60)
+_last_path = None
 
 ROOT_URL = "http://www.mangapanda.com"
 
@@ -83,18 +88,24 @@ class DirectoryPageCollection(DAVCollection):
     def __init__(self, path, environ, genre):
         DAVCollection.__init__(self, path, environ)
         self.genre = genre
+        try:
+            self.maxidx = _dircache[path]
+        except KeyError:
+            self.maxidx = 0
     
     def getDisplayInfo(self):
         return {"type": "Pages"}
     
     def getMemberNames(self):
-        url = ROOT_URL + "/popular/%s" % self.genre
-        _logger.debug(url)
-        html = urllib2.urlopen(url).read()
-        navurls = PTN_NAV.findall(html)
-        _logger.debug("page buttons %d" % len(navurls))
-        maxidx = int(navurls[-1])
-        return map(str, range(0, maxidx+1, 30))
+        if not self.maxidx:
+            url = ROOT_URL + "/popular/%s" % self.genre
+            _logger.debug(url)
+            html = urllib2.urlopen(url).read()
+            navurls = PTN_NAV.findall(html)
+            _logger.debug("page buttons %d" % len(navurls))
+            self.maxidx = int(navurls[-1])
+            _dircache[self.path] = self.maxidx
+        return map(str, range(0, self.maxidx+1, 30))
     
     def getMember(self, name):
         if name.isdigit():
@@ -110,7 +121,10 @@ class DirectoryCollection(DAVCollection):
     def __init__(self, path, environ, url):
         DAVCollection.__init__(self, path, environ)
         self.url = url
-        self.mangas = None
+        try:
+            self.mangas = _dircache[path]
+        except KeyError:
+            self.mangas = None
     
     def getDisplayInfo(self):
         return {"type": "List"}
@@ -123,21 +137,22 @@ class DirectoryCollection(DAVCollection):
     def getMember(self, name):
         if self.mangas is None:
             self.extractInfo()
-        if title in self.mangas:
-            if title == name:
-                url = ROOT_URL + "/" + mid
-                return MangaCollection(joinUri(self.path, name), self.environ, url)
-        return None
+        try:
+            url = ROOT_URL + "/" + self.mangas[name]
+            return MangaCollection(joinUri(self.path, name), self.environ, url)
+        except:
+            return None
 
     def extractInfo(self):
         _logger.debug(self.url)
         html = urllib2.urlopen(self.url).read()
         soup = BeautifulSoup(html)
-        self.mangas = []
+        self.mangas = OrderedDict()
         for node in soup.findAll('h3'):
             title = str(node.a.string)
             mid = node.a.get('href')[1:]
-            self.mangas = (title, mid)
+            self.mangas[title] = mid
+        _dircache[self.path] = self.mangas
 
 
 #===============================================================================
@@ -148,7 +163,10 @@ class MangaCollection(DAVCollection):
     def __init__(self, path, environ, url):
         DAVCollection.__init__(self, path, environ)
         self.url = url
-        self.chapters = None
+        try:
+            self.chapters = _dircache[path]
+        except KeyError:
+            self.chapters = None
     
     def getDisplayInfo(self):
         return {"type": "Manga"}
@@ -173,6 +191,7 @@ class MangaCollection(DAVCollection):
         for node in soup.find('table',{'id':'listing'}).findAll('a'):
             url = str(node.get('href'))
             self.chapters.append( url.split('/')[-1] )
+        _dircache[self.path] = self.chapters
 
 
 class ChapterCollection(DAVCollection):
@@ -180,27 +199,32 @@ class ChapterCollection(DAVCollection):
     def __init__(self, path, environ, url):
         DAVCollection.__init__(self, path, environ)
         self.url = url
+        try:
+            self.maxpg = _dircache[path]
+        except KeyError:
+            self.maxpg = 0
     
     def getDisplayInfo(self):
         return {"type": "Chapter"}
     
     def getMemberNames(self):
-        _logger.debug(self.url)
-        html = urllib2.urlopen(self.url).read()
-        soup = BeautifulSoup(html)
-        node = soup.find('div',{'id':'selectpage'})
-        if node is None:
-            _logger.error("no page info found")
-            return []
-        maxpg_text = str(node)
-        match = PTN_MAXPG.search(maxpg_text)
-        if not match:
-            _logger.error("no max page found")
-            return []
-        maxpg = int(match.group(1))
+        if not self.maxpg:
+            _logger.debug(self.url)
+            html = urllib2.urlopen(self.url).read()
+            soup = BeautifulSoup(html)
+            node = soup.find('div',{'id':'selectpage'})
+            if node is None:
+                _logger.error("no page info found")
+                return []
+            maxpg_text = str(node)
+            match = PTN_MAXPG.search(maxpg_text)
+            if not match:
+                _logger.error("no max page found")
+                return []
+            self.maxpg = int(match.group(1))
         if AddImgExt:
-            return ["%d.jpg" % pg for pg in range(1, maxpg+1)]
-        return map(str, range(1, maxpg+1))
+            return ["%d.jpg" % pg for pg in range(1, self.maxpg+1)]
+        return map(str, range(1, self.maxpg+1))
     
     def getMember(self, name):
         url = self.url + "/" + name.rsplit(".", 1)[0]   # =splitext()
@@ -256,5 +280,11 @@ class MangapandaProvider(DAVProvider):
     def getResourceInst(self, path, environ):
         _logger.info("getResourceInst('%s')" % path)
         self._count_getResourceInst += 1
+        global _last_path
+        if _last_path == path:
+            global _dircache
+            #del _dircache[path]
+            _dircache.__delete__(path)
+        _last_path = path
         root = RootCollection(environ)
         return root.resolve("", path)

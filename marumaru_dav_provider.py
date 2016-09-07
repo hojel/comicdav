@@ -5,6 +5,7 @@ Proxy marumaru.in as virtual DAV
 import urllib
 import urllib2
 from BeautifulSoup import BeautifulSoup
+from collections import OrderedDict
 from wsgidav.util import joinUri
 from wsgidav.dav_provider import DAVProvider, DAVNonCollection, DAVCollection
 from wsgidav.dav_error import DAVError, HTTP_FORBIDDEN, HTTP_INTERNAL_ERROR,\
@@ -13,10 +14,14 @@ from wsgidav import util
 import re
 import base64
 import js2py
+from lru import LRUCacheDict
 
 __docformat__ = "reStructuredText"
 
 _logger = util.getModuleLogger(__name__)
+
+_dircache = LRUCacheDict(max_size=10, expiration=30*60)
+_last_path = None
 
 ROOT_URL = "http://marumaru.in"
 
@@ -114,17 +119,17 @@ class ListPageCollection(DAVCollection):
     def __init__(self, path, environ, url):
         DAVCollection.__init__(self, path, environ)
         self.url = url
-        self.maxpage = 0
+        try:
+            self.maxpage = _dircache[path]
+        except KeyError:
+            self.maxpage = 0
     
     def getDisplayInfo(self):
         return {"type": "Pages"}
     
     def getMemberNames(self):
-        req = urllib2.Request(self.url, headers=req_hdrs)
-        html = urllib2.urlopen(req).read()
-        match = PTN_MAXPG.search(html)
-        if match:
-            self.maxpage = int(match.group(1))
+        if not self.maxpage:
+            self.extractInfo()
         return map(str, range(1, self.maxpage+1))
     
     def getMember(self, name):
@@ -134,13 +139,24 @@ class ListPageCollection(DAVCollection):
         _logger.error("unexpected member name, "+name)
         return None
 
+    def extractInfo(self):
+        _logger.debug(self.url)
+        req = urllib2.Request(self.url, headers=req_hdrs)
+        html = urllib2.urlopen(req).read()
+        match = PTN_MAXPG.search(html)
+        if match:
+            self.maxpage = int(match.group(1))
+            _dircache[self.path] = self.maxpage
 
 class ListCollection(DAVCollection):
     """ site: /?c=1/{id}&p={num}"""
     def __init__(self, path, environ, url):
         DAVCollection.__init__(self, path, environ)
         self.url = url
-        self.series = None
+        try:
+            self.series = _dircache[path]
+        except KeyError:
+            self.series = None
     
     def getDisplayInfo(self):
         return {"type": "List"}
@@ -148,26 +164,27 @@ class ListCollection(DAVCollection):
     def getMemberNames(self):
         if self.series is None:
             self.extractInfo()
-        return [title for title,_ in self.series]
+        return self.series.keys()
     
     def getMember(self, name):
         if self.series is None:
             self.extractInfo()
-        for title, url in self.series:
-            if title == name:
-                return SeriesCollection(joinUri(self.path, name), self.environ, url)
-        return None
+        try:
+            return SeriesCollection(joinUri(self.path, name), self.environ, self.series[name])
+        except:
+            return None
 
     def extractInfo(self):
         _logger.debug(self.url)
         req = urllib2.Request(self.url, headers=req_hdrs)
         html = urllib2.urlopen(req).read()
         soup = BeautifulSoup(html)
-        self.series = []
+        self.series = OrderedDict()
         for node in soup.findAll('div', {'class':'list'}):
             title = str(node.find('span', {'class':'subject'}).string)
             url = ROOT_URL + PTN_SRURL.search(node['onclick']).group(1)
-            self.series.append( (title, url) )
+            self.series[title] = url
+        _dircache[self.path] = self.series
 
 
 #===============================================================================
@@ -177,7 +194,10 @@ class SeriesCollection(DAVCollection):
     def __init__(self, path, environ, url):
         DAVCollection.__init__(self, path, environ)
         self.url = url
-        self.episodes = None
+        try:
+            self.episodes = _dircache[path]
+        except KeyError:
+            self.episodes = None
     
     def getDisplayInfo(self):
         return {"type": "Series"}
@@ -185,27 +205,28 @@ class SeriesCollection(DAVCollection):
     def getMemberNames(self):
         if self.episodes is None:
             self.extractInfo()
-        return [title for title,_ in self.episodes]
+        return self.episodes.keys()
     
     def getMember(self, name):
         if self.episodes is None:
             self.extractInfo()
-        for title, url in self.episodes:
-            if title == name:
-                return EpisodeCollection(joinUri(self.path, name), self.environ, url)
-        return None
+        try:
+            return EpisodeCollection(joinUri(self.path, name), self.environ, self.episodes[name])
+        except:
+            return None
 
     def extractInfo(self):
         _logger.debug(self.url)
         req = urllib2.Request(self.url, headers=req_hdrs)
         html = urllib2.urlopen(req).read()
         soup = BeautifulSoup(html)
-        self.episodes = []
+        self.episodes = OrderedDict()
         for node in soup.findAll('a', {'href':PTN_ARCHIVE}):
             #title = str(node.string)
             title = unicode(node.text).encode('utf-8')
             url = node.get('href')
-            self.episodes.append( (title, url) )
+            self.episodes[title] = url
+        _dircache[self.path] = self.episodes
 
 
 class EpisodeCollection(DAVCollection):
@@ -214,8 +235,11 @@ class EpisodeCollection(DAVCollection):
         url = url.replace("http://www.shencomics.com", "http://blog.yuncomics.com")
         url = url.replace("http://www.yuncomics.com", "http://blog.yuncomics.com")
         self.url = url
-        self.cookie = None
-        self.imgurls = None
+        try:
+            self.cookie, self.imgurls = _dircache[path]
+        except KeyError:
+            self.cookie = None
+            self.imgurls = None
     
     def getDisplayInfo(self):
         return {"type": "Episode"}
@@ -256,6 +280,7 @@ class EpisodeCollection(DAVCollection):
             req = urllib2.Request(self.url, headers=req_hdrs)
             html = urllib2.urlopen(req).read()
         self.imgurls = PTN_IMGURL.findall(html)
+        _dircache[self.path] = (self.cookie, self.imgurls)
 
     @staticmethod
     def basename(url):
@@ -292,7 +317,7 @@ class ImageFile(DAVNonCollection):
 
     def getContent(self):
         if self.cookie:
-            req_hdrs["Cookie"] = cookie
+            req_hdrs["Cookie"] = self.cookie
         req = urllib2.Request(self.url, headers=req_hdrs)
         req.add_header('Referer', self.refurl)
         return urllib2.urlopen(req)
@@ -308,5 +333,11 @@ class MarumaruProvider(DAVProvider):
     def getResourceInst(self, path, environ):
         _logger.info("getResourceInst('%s')" % path)
         self._count_getResourceInst += 1
+        global _last_path
+        if _last_path == path:
+            global _dircache
+            #del _dircache[path]
+            _dircache.__delete__(path)
+        _last_path = path
         root = RootCollection(environ)
         return root.resolve("", path)

@@ -9,10 +9,14 @@ from wsgidav.dav_provider import DAVProvider, DAVNonCollection, DAVCollection
 from wsgidav.dav_error import DAVError, HTTP_FORBIDDEN, HTTP_INTERNAL_ERROR,\
     PRECONDITION_CODE_ProtectedProperty
 from wsgidav import util
+from lru import LRUCacheDict
 
 __docformat__ = "reStructuredText"
 
 _logger = util.getModuleLogger(__name__)
+
+_dircache = LRUCacheDict(max_size=10, expiration=30*60)
+_last_path = None
 
 ROOT_URL = "https://hitomi.la"
 FILE_URL = "https://i.hitomi.la/galleries/"
@@ -85,7 +89,10 @@ class GListCollection(DAVCollection):
         DAVCollection.__init__(self, path, environ)
         sp = self.path.rsplit('/', 2)
         self.url = ROOT_URL + "/%s-%s-%s.html" % (list_type, sp[-2], sp[-1])
-        self.galleries = None
+        try:
+            self.galleries = _dircache[path]
+        except KeyError:
+            self.galleries = None
     
     def getDisplayInfo(self):
         return {"type": "List"}
@@ -109,6 +116,7 @@ class GListCollection(DAVCollection):
         _logger.debug("GList('%s')" % self.url)
         html = urllib2.urlopen(self.url).read()
         self.galleries = PTN_GALLERY.findall(html)
+        _dircache[self.path] = self.galleries
 
 
 #===============================================================================
@@ -120,7 +128,10 @@ class GalleryCollection(DAVCollection):
     def __init__(self, path, environ, url):
         DAVCollection.__init__(self, path, environ)
         self.url = url
-        self.imgnames = None
+        try:
+            self.imgnames = _dircache[path]
+        except KeyError:
+            self.imgnames = None
 
     def getDisplayInfo(self):
         return {"type": "Gallery"}
@@ -131,6 +142,7 @@ class GalleryCollection(DAVCollection):
             _logger.debug("gallery('%s')" % nurl)
             jstr = urllib2.urlopen(nurl).read()
             self.imgnames = PTN_IMAGE.findall(jstr)
+            _dircache[self.path] = self.imgnames
         return self.imgnames
 
     def getMember(self, name):
@@ -182,5 +194,11 @@ class HitomiProvider(DAVProvider):
     def getResourceInst(self, path, environ):
         _logger.info("getResourceInst('%s')" % path)
         self._count_getResourceInst += 1
+        global _last_path
+        if _last_path == path:
+            global _dircache
+            #del _dircache[path]
+            _dircache.__delete__(path)
+        _last_path = path
         root = RootCollection(environ)
         return root.resolve("", path)

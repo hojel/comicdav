@@ -13,9 +13,10 @@ This virtual server gives benefit for the user to view comics with his favorite 
 * wsgidav (webdav server)
 * beautifulsoup
 * js2py
+* py\_lru\_cache
 
 ```bash
-$ pip install wsgidav beautifulsoup js2py
+$ pip install wsgidav beautifulsoup js2py py_lru_cache
 ```
 
 ### 2. run server
