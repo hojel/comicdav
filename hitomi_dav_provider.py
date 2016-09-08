@@ -154,12 +154,12 @@ class GListCollection(DAVCollection):
     
     def getMemberNames(self):
         if self.galleries is None:
-            self.parseSite()
+            self.extractInfo()
         return [self.name_clean(gname) for gid, gname in self.galleries]
     
     def getMember(self, name):
         if self.galleries is None:
-            self.parseSite()
+            self.extractInfo()
         for gid, gname in self.galleries:
             if self.name_clean(gname) == name:
                 url = ROOT_URL+"/galleries/%s.html" % gid
@@ -167,7 +167,7 @@ class GListCollection(DAVCollection):
         _logger.warning("unexpected name, %s" % name)
         return []
 
-    def parseSite(self):
+    def extractInfo(self):
         _logger.debug("GList('%s')" % self.url)
         html = urllib2.urlopen(self.url).read()
         self.galleries = PTN_GALLERY.findall(html)

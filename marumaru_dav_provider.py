@@ -232,8 +232,8 @@ class SeriesCollection(DAVCollection):
 class EpisodeCollection(DAVCollection):
     def __init__(self, path, environ, url):
         DAVCollection.__init__(self, path, environ)
-        url = url.replace("http://www.shencomics.com", "http://blog.yuncomics.com")
-        url = url.replace("http://www.yuncomics.com", "http://blog.yuncomics.com")
+        url = url.replace("http://www.shencomics.com", "http://www.yuncomics.com")
+        url = url.replace("http://blog.yuncomics.com", "http://www.yuncomics.com")
         self.url = url
         try:
             self.cookie, self.imgurls = _dircache[path]
