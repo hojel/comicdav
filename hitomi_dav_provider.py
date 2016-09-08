@@ -35,12 +35,17 @@ class RootCollection(DAVCollection):
         DAVCollection.__init__(self, "/", environ)
         
     def getMemberNames(self):
-        return ["by_language"]
+        return ["by_language", "by_author", "by_tag"]
     
     def getMember(self, name):
         # Handle visible categories and also /by_key/...
+        path = joinUri(self.path, name)
         if name == "by_language":
-            return LanguageCollection(joinUri(self.path, name), self.environ)
+            return LanguageCollection(path, self.environ)
+        elif name == "by_author":
+            return AuthorCollection(path, self.environ)
+        elif name == "by_tag":
+            return TagCollection(path, self.environ)
         return []
 
 
@@ -58,7 +63,57 @@ class LanguageCollection(DAVCollection):
     
     def getMember(self, name):
         if name in self._languages:
-            return PageCollection(joinUri(self.path, name), self.environ, "index")
+            ltype = "%s-%s" % ("index", name)
+            return PageCollection(joinUri(self.path, name), self.environ, ltype)
+        return []
+
+
+class AuthorCollection(DAVCollection):
+    """Resolve '/by_author' URLs."""
+    _author = [ "cuvie",
+                "hazuki kaoru",
+                "kirie masanobu",
+                "sanbun kyoden",
+                "shiwasu no okina",
+                "takemura sesshu",
+                "tsukino jyogi",
+                "yamatogawa",
+                "yonekura kengo"
+              ]
+    def __init__(self, path, environ):
+        DAVCollection.__init__(self, path, environ)
+    
+    def getDisplayInfo(self):
+        return {"type": "Author"}
+    
+    def getMemberNames(self):
+        return self._author
+    
+    def getMember(self, name):
+        if name in self._author:
+            #ltype = "artist/%s-%s" % (name, "all")
+            ltype = "artist/%s-%s" % (name, "korean")
+            return PageCollection(joinUri(self.path, name), self.environ, ltype)
+        return []
+
+
+class TagCollection(DAVCollection):
+    """Resolve '/by_tag' URLs."""
+    _tag = ["webtoon", ]
+    def __init__(self, path, environ):
+        DAVCollection.__init__(self, path, environ)
+    
+    def getDisplayInfo(self):
+        return {"type": "Tag"}
+    
+    def getMemberNames(self):
+        return self._tag
+    
+    def getMember(self, name):
+        if name in self._tag:
+            #ltype = "tag/%s-%s" % (name, "all")
+            ltype = "tag/%s-%s" % (name, "korean")
+            return PageCollection(joinUri(self.path, name), self.environ, ltype)
         return []
 
 
@@ -76,7 +131,8 @@ class PageCollection(DAVCollection):
     
     def getMember(self, name):
         if int(name) <= 100:
-            return GListCollection(joinUri(self.path, name), self.environ, self.list_type)
+            url = ROOT_URL + "/%s-%s.html" % (self.list_type, name)
+            return GListCollection(joinUri(self.path, name), self.environ, url)
         _logger.warning("expect number as page('%s')" % name)
         return []
 
@@ -85,10 +141,9 @@ class PageCollection(DAVCollection):
 #===============================================================================
 class GListCollection(DAVCollection):
     """Resolve '/by_language/korean/1' URLs"""
-    def __init__(self, path, environ, list_type):
+    def __init__(self, path, environ, url):
         DAVCollection.__init__(self, path, environ)
-        sp = self.path.rsplit('/', 2)
-        self.url = ROOT_URL + "/%s-%s-%s.html" % (list_type, sp[-2], sp[-1])
+        self.url = url
         try:
             self.galleries = _dircache[path]
         except KeyError:
@@ -100,13 +155,13 @@ class GListCollection(DAVCollection):
     def getMemberNames(self):
         if self.galleries is None:
             self.parseSite()
-        return [gname for gid, gname in self.galleries]
+        return [self.name_clean(gname) for gid, gname in self.galleries]
     
     def getMember(self, name):
         if self.galleries is None:
             self.parseSite()
         for gid, gname in self.galleries:
-            if gname == name:
+            if self.name_clean(gname) == name:
                 url = ROOT_URL+"/galleries/%s.html" % gid
                 return GalleryCollection(joinUri(self.path, name), self.environ, url)
         _logger.warning("unexpected name, %s" % name)
@@ -117,6 +172,9 @@ class GListCollection(DAVCollection):
         html = urllib2.urlopen(self.url).read()
         self.galleries = PTN_GALLERY.findall(html)
         _dircache[self.path] = self.galleries
+
+    def name_clean(self, name):
+        return name.replace('|','')     # for ComicGlass
 
 
 #===============================================================================
