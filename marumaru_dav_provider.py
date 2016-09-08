@@ -14,13 +14,12 @@ from wsgidav import util
 import re
 import base64
 import js2py
-from lru import LRUCacheDict
 
 __docformat__ = "reStructuredText"
 
 _logger = util.getModuleLogger(__name__)
 
-_dircache = LRUCacheDict(max_size=10, expiration=30*60)
+from util import _dircache
 _last_path = None
 
 ROOT_URL = "http://marumaru.in"

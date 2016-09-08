@@ -9,13 +9,12 @@ from wsgidav.dav_provider import DAVProvider, DAVNonCollection, DAVCollection
 from wsgidav.dav_error import DAVError, HTTP_FORBIDDEN, HTTP_INTERNAL_ERROR,\
     PRECONDITION_CODE_ProtectedProperty
 from wsgidav import util
-from lru import LRUCacheDict
 
 __docformat__ = "reStructuredText"
 
 _logger = util.getModuleLogger(__name__)
 
-_dircache = LRUCacheDict(max_size=10, expiration=30*60)
+from util import _dircache
 _last_path = None
 
 ROOT_URL = "https://hitomi.la"
