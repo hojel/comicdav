@@ -34,15 +34,15 @@ class RootCollection(DAVCollection):
         DAVCollection.__init__(self, "/", environ)
         
     def getMemberNames(self):
-        return ["by_language", "by_author", "by_tag"]
+        return ["by_language", "by_artist", "by_tag"]
     
     def getMember(self, name):
         # Handle visible categories and also /by_key/...
         path = joinUri(self.path, name)
         if name == "by_language":
             return LanguageCollection(path, self.environ)
-        elif name == "by_author":
-            return AuthorCollection(path, self.environ)
+        elif name == "by_artist":
+            return ArtistCollection(path, self.environ)
         elif name == "by_tag":
             return TagCollection(path, self.environ)
         return []
@@ -67,11 +67,12 @@ class LanguageCollection(DAVCollection):
         return []
 
 
-class AuthorCollection(DAVCollection):
-    """Resolve '/by_author' URLs."""
-    _author = [ "cuvie",
+class ArtistCollection(DAVCollection):
+    """Resolve '/by_artist' URLs."""
+    _artist = [ "cuvie",
                 "hazuki kaoru",
                 "kirie masanobu",
+                "kisaragi gunma",
                 "sanbun kyoden",
                 "shiwasu no okina",
                 "takemura sesshu",
@@ -83,13 +84,13 @@ class AuthorCollection(DAVCollection):
         DAVCollection.__init__(self, path, environ)
     
     def getDisplayInfo(self):
-        return {"type": "Author"}
+        return {"type": "Artist"}
     
     def getMemberNames(self):
-        return self._author
+        return self._artist
     
     def getMember(self, name):
-        if name in self._author:
+        if name in self._artist:
             #ltype = "artist/%s-%s" % (name, "all")
             ltype = "artist/%s-%s" % (name, "korean")
             return PageCollection(joinUri(self.path, name), self.environ, ltype)
