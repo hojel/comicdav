@@ -70,15 +70,19 @@ class LanguageCollection(DAVCollection):
 class ArtistCollection(DAVCollection):
     """Resolve '/by_artist' URLs."""
     _artist = [ "cuvie",
+                "fukudahda",
                 "hazuki kaoru",
+                "hisasi",
                 "kirie masanobu",
                 "kisaragi gunma",
                 "sanbun kyoden",
                 "shiwasu no okina",
                 "takemura sesshu",
+                "tosh",
                 "tsukino jyogi",
                 "yamatogawa",
-                "yonekura kengo"
+                "yonekura kengo",
+                "yuzuki n dash"
               ]
     def __init__(self, path, environ):
         DAVCollection.__init__(self, path, environ)
@@ -144,8 +148,9 @@ class GListCollection(DAVCollection):
     def __init__(self, path, environ, url):
         DAVCollection.__init__(self, path, environ)
         self.url = url
+        self.abspath = self.provider.sharePath + path
         try:
-            self.galleries = _dircache[path]
+            self.galleries = _dircache[self.abspath]
         except KeyError:
             self.galleries = None
     
@@ -171,7 +176,7 @@ class GListCollection(DAVCollection):
         _logger.debug("GList('%s')" % self.url)
         html = urllib2.urlopen(self.url).read()
         self.galleries = PTN_GALLERY.findall(html)
-        _dircache[self.path] = self.galleries
+        _dircache[self.abspath] = self.galleries
 
     def name_clean(self, name):
         return name.replace('|','')     # for ComicGlass
@@ -186,8 +191,9 @@ class GalleryCollection(DAVCollection):
     def __init__(self, path, environ, url):
         DAVCollection.__init__(self, path, environ)
         self.url = url
+        self.abspath = self.provider.sharePath + path
         try:
-            self.imgnames = _dircache[path]
+            self.imgnames = _dircache[self.abspath]
         except KeyError:
             self.imgnames = None
 
@@ -200,7 +206,7 @@ class GalleryCollection(DAVCollection):
             _logger.debug("gallery('%s')" % nurl)
             jstr = urllib2.urlopen(nurl).read()
             self.imgnames = PTN_IMAGE.findall(jstr)
-            _dircache[self.path] = self.imgnames
+            _dircache[self.abspath] = self.imgnames
         return self.imgnames
 
     def getMember(self, name):
@@ -253,10 +259,11 @@ class HitomiProvider(DAVProvider):
         _logger.info("getResourceInst('%s')" % path)
         self._count_getResourceInst += 1
         global _last_path
-        if _last_path == path:
+        npath = self.sharePath + path
+        if _last_path == npath:
             global _dircache
-            #del _dircache[path]
-            _dircache.__delete__(path)
-        _last_path = path
+            #del _dircache[npath]
+            _dircache.__delete__(npath)
+        _last_path = npath
         root = RootCollection(environ)
         return root.resolve("", path)

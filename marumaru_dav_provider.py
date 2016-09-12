@@ -118,8 +118,9 @@ class ListPageCollection(DAVCollection):
     def __init__(self, path, environ, url):
         DAVCollection.__init__(self, path, environ)
         self.url = url
+        self.abspath = self.provider.sharePath + path
         try:
-            self.maxpage = _dircache[path]
+            self.maxpage = _dircache[self.abspath]
         except KeyError:
             self.maxpage = 0
     
@@ -145,15 +146,16 @@ class ListPageCollection(DAVCollection):
         match = PTN_MAXPG.search(html)
         if match:
             self.maxpage = int(match.group(1))
-            _dircache[self.path] = self.maxpage
+            _dircache[self.abspath] = self.maxpage
 
 class ListCollection(DAVCollection):
     """ site: /?c=1/{id}&p={num}"""
     def __init__(self, path, environ, url):
         DAVCollection.__init__(self, path, environ)
         self.url = url
+        self.abspath = self.provider.sharePath + path
         try:
-            self.series = _dircache[path]
+            self.series = _dircache[self.abspath]
         except KeyError:
             self.series = None
     
@@ -183,7 +185,7 @@ class ListCollection(DAVCollection):
             title = str(node.find('span', {'class':'subject'}).string)
             url = ROOT_URL + PTN_SRURL.search(node['onclick']).group(1)
             self.series[title] = url
-        _dircache[self.path] = self.series
+        _dircache[self.abspath] = self.series
 
 
 #===============================================================================
@@ -193,8 +195,9 @@ class SeriesCollection(DAVCollection):
     def __init__(self, path, environ, url):
         DAVCollection.__init__(self, path, environ)
         self.url = url
+        self.abspath = self.provider.sharePath + path
         try:
-            self.episodes = _dircache[path]
+            self.episodes = _dircache[self.abspath]
         except KeyError:
             self.episodes = None
     
@@ -225,17 +228,16 @@ class SeriesCollection(DAVCollection):
             title = unicode(node.text).encode('utf-8')
             url = node.get('href')
             self.episodes[title] = url
-        _dircache[self.path] = self.episodes
+        _dircache[self.abspath] = self.episodes
 
 
 class EpisodeCollection(DAVCollection):
     def __init__(self, path, environ, url):
         DAVCollection.__init__(self, path, environ)
-        url = url.replace("http://www.shencomics.com", "http://www.yuncomics.com")
-        url = url.replace("http://blog.yuncomics.com", "http://www.yuncomics.com")
         self.url = url
+        self.abspath = self.provider.sharePath + path
         try:
-            self.cookie, self.imgurls = _dircache[path]
+            self.cookie, self.imgurls = _dircache[self.abspath]
         except KeyError:
             self.cookie = None
             self.imgurls = None
@@ -265,8 +267,11 @@ class EpisodeCollection(DAVCollection):
         return ImageFile(joinUri(self.path, name), self.environ, url, self.url, self.cookie)
 
     def extractInfo(self):
-        _logger.debug(self.url)
-        req = urllib2.Request(self.url, headers=req_hdrs)
+        url = self.url
+        url = url.replace("http://www.shencomics.com", "http://www.yuncomics.com")
+        url = url.replace("http://blog.yuncomics.com", "http://www.yuncomics.com")
+        _logger.debug(url)
+        req = urllib2.Request(url, headers=req_hdrs)
         html = urllib2.urlopen(req).read()
         match = PTN_SUCURI.search(html)
         if match:
@@ -279,7 +284,7 @@ class EpisodeCollection(DAVCollection):
             req = urllib2.Request(self.url, headers=req_hdrs)
             html = urllib2.urlopen(req).read()
         self.imgurls = PTN_IMGURL.findall(html)
-        _dircache[self.path] = (self.cookie, self.imgurls)
+        _dircache[self.abspath] = (self.cookie, self.imgurls)
 
     @staticmethod
     def basename(url):
@@ -333,10 +338,11 @@ class MarumaruProvider(DAVProvider):
         _logger.info("getResourceInst('%s')" % path)
         self._count_getResourceInst += 1
         global _last_path
-        if _last_path == path:
+        npath = self.sharePath + path
+        if _last_path == npath:
             global _dircache
-            #del _dircache[path]
-            _dircache.__delete__(path)
-        _last_path = path
+            #del _dircache[npath]
+            _dircache.__delete__(npath)
+        _last_path = npath
         root = RootCollection(environ)
         return root.resolve("", path)

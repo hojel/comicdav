@@ -87,8 +87,9 @@ class DirectoryPageCollection(DAVCollection):
     def __init__(self, path, environ, genre):
         DAVCollection.__init__(self, path, environ)
         self.genre = genre
+        self.abspath = self.provider.sharePath + path
         try:
-            self.maxidx = _dircache[path]
+            self.maxidx = _dircache[self.abspath]
         except KeyError:
             self.maxidx = 0
     
@@ -103,7 +104,7 @@ class DirectoryPageCollection(DAVCollection):
             navurls = PTN_NAV.findall(html)
             _logger.debug("page buttons %d" % len(navurls))
             self.maxidx = int(navurls[-1])
-            _dircache[self.path] = self.maxidx
+            _dircache[self.abspath] = self.maxidx
         return map(str, range(0, self.maxidx+1, 30))
     
     def getMember(self, name):
@@ -120,8 +121,9 @@ class DirectoryCollection(DAVCollection):
     def __init__(self, path, environ, url):
         DAVCollection.__init__(self, path, environ)
         self.url = url
+        self.abspath = self.provider.sharePath + path
         try:
-            self.mangas = _dircache[path]
+            self.mangas = _dircache[self.abspath]
         except KeyError:
             self.mangas = None
     
@@ -151,7 +153,7 @@ class DirectoryCollection(DAVCollection):
             title = str(node.a.string)
             mid = node.a.get('href')[1:]
             self.mangas[title] = mid
-        _dircache[self.path] = self.mangas
+        _dircache[self.abspath] = self.mangas
 
 
 #===============================================================================
@@ -162,8 +164,9 @@ class MangaCollection(DAVCollection):
     def __init__(self, path, environ, url):
         DAVCollection.__init__(self, path, environ)
         self.url = url
+        self.abspath = self.provider.sharePath + path
         try:
-            self.chapters = _dircache[path]
+            self.chapters = _dircache[self.abspath]
         except KeyError:
             self.chapters = None
     
@@ -190,7 +193,7 @@ class MangaCollection(DAVCollection):
         for node in soup.find('table',{'id':'listing'}).findAll('a'):
             url = str(node.get('href'))
             self.chapters.append( url.split('/')[-1] )
-        _dircache[self.path] = self.chapters
+        _dircache[self.abspath] = self.chapters
 
 
 class ChapterCollection(DAVCollection):
@@ -198,8 +201,9 @@ class ChapterCollection(DAVCollection):
     def __init__(self, path, environ, url):
         DAVCollection.__init__(self, path, environ)
         self.url = url
+        self.abspath = self.provider.sharePath + path
         try:
-            self.maxpg = _dircache[path]
+            self.maxpg = _dircache[self.abspath]
         except KeyError:
             self.maxpg = 0
     
@@ -221,6 +225,7 @@ class ChapterCollection(DAVCollection):
                 _logger.error("no max page found")
                 return []
             self.maxpg = int(match.group(1))
+            _dircache[self.abspath] = self.maxpg
         if AddImgExt:
             return ["%d.jpg" % pg for pg in range(1, self.maxpg+1)]
         return map(str, range(1, self.maxpg+1))
@@ -280,10 +285,11 @@ class MangapandaProvider(DAVProvider):
         _logger.info("getResourceInst('%s')" % path)
         self._count_getResourceInst += 1
         global _last_path
-        if _last_path == path:
+        npath = self.sharePath + path
+        if _last_path == npath:
             global _dircache
-            #del _dircache[path]
-            _dircache.__delete__(path)
-        _last_path = path
+            #del _dircache[npath]
+            _dircache.__delete__(npath)
+        _last_path = npath
         root = RootCollection(environ)
         return root.resolve("", path)
