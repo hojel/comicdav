@@ -18,7 +18,7 @@ from util import _dircache
 _last_path = None
 
 ROOT_URL = "https://hitomi.la"
-FILE_URL = "https://i.hitomi.la/galleries/"
+FILE_URL = "https://a.hitomi.la/galleries/"
 
 PTN_GALLERY = re.compile('<h1><a href=".*?(\d+)\.html">(.*?)</a></h1>')
 PTN_IMAGE   = re.compile('"name":"(.*?)"')
