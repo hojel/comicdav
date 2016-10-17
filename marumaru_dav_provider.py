@@ -283,6 +283,7 @@ class EpisodeCollection(DAVCollection):
             req_hdrs["Cookie"] = self.cookie
             req = urllib2.Request(self.url, headers=req_hdrs)
             html = urllib2.urlopen(req).read()
+        self.url = url
         self.imgurls = PTN_IMGURL.findall(html)
         _dircache[self.abspath] = (self.cookie, self.imgurls)
 
