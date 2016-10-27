@@ -4,6 +4,7 @@ Proxy hitomi.la as virtual DAV
 """
 import urllib2
 import re
+from collections import OrderedDict
 from wsgidav.util import joinUri
 from wsgidav.dav_provider import DAVProvider, DAVNonCollection, DAVCollection
 from wsgidav.dav_error import DAVError, HTTP_FORBIDDEN, HTTP_INTERNAL_ERROR,\
@@ -18,7 +19,7 @@ from util import _dircache
 _last_path = None
 
 ROOT_URL = "https://hitomi.la"
-FILE_URL = "https://i.hitomi.la/galleries/"
+FILE_URL = "https://%s.hitomi.la/galleries/%s/"
 
 PTN_GALLERY = re.compile('<h1><a href=".*?(\d+)\.html">(.*?)</a></h1>')
 PTN_IMAGE   = re.compile('"name":"(.*?)"')
@@ -34,13 +35,17 @@ class RootCollection(DAVCollection):
         DAVCollection.__init__(self, "/", environ)
         
     def getMemberNames(self):
-        return ["by_language", "by_artist", "by_tag"]
+        return ["by_date", "by_popularity", "by_artist", "by_tag", "by_language"]
     
     def getMember(self, name):
         # Handle visible categories and also /by_key/...
         path = joinUri(self.path, name)
         if name == "by_language":
             return LanguageCollection(path, self.environ)
+        elif name == "by_date":
+            return PageCollection(path, self.environ, "index-"+self.environ['hitomi.language'])
+        elif name == "by_popularity":
+            return PageCollection(path, self.environ, "popular-"+self.environ['hitomi.language'])
         elif name == "by_artist":
             return ArtistCollection(path, self.environ)
         elif name == "by_tag":
@@ -82,7 +87,7 @@ class ArtistCollection(DAVCollection):
                 "tsukino jyogi",
                 "yamatogawa",
                 "yonekura kengo",
-                "yuzuki n dash"
+                "yuzuki n dash",
               ]
     def __init__(self, path, environ):
         DAVCollection.__init__(self, path, environ)
@@ -95,15 +100,29 @@ class ArtistCollection(DAVCollection):
     
     def getMember(self, name):
         if name in self._artist:
-            #ltype = "artist/%s-%s" % (name, "all")
-            ltype = "artist/%s-%s" % (name, "korean")
+            ltype = "artist/%s-%s" % (name, self.environ['hitomi.language'])
             return PageCollection(joinUri(self.path, name), self.environ, ltype)
         return []
 
 
 class TagCollection(DAVCollection):
     """Resolve '/by_tag' URLs."""
-    _tag = ["webtoon", ]
+    _tag = [ "female:ahegao",
+             "female:cervix penetration",
+             "female:defloration",
+             "female:exhibitionism",
+             "female:humiliation",
+             "female:mind break",
+             "female:mind control",
+             "female:nakadashi",
+             "female:parasite",
+             "female:sole female",
+             "female:tentacles",
+             "female:x-ray",
+             "story arc",
+             "uncensored",
+             "webtoon",
+           ]
     def __init__(self, path, environ):
         DAVCollection.__init__(self, path, environ)
     
@@ -115,8 +134,7 @@ class TagCollection(DAVCollection):
     
     def getMember(self, name):
         if name in self._tag:
-            #ltype = "tag/%s-%s" % (name, "all")
-            ltype = "tag/%s-%s" % (name, "korean")
+            ltype = "tag/%s-%s" % (name, self.environ['hitomi.language'])
             return PageCollection(joinUri(self.path, name), self.environ, ltype)
         return []
 
@@ -187,30 +205,43 @@ class GListCollection(DAVCollection):
 #===============================================================================
 class GalleryCollection(DAVCollection):
     """Resolve '/by_language/korean/1/title' URLs"""
-
     def __init__(self, path, environ, url):
         DAVCollection.__init__(self, path, environ)
         self.url = url
         self.abspath = self.provider.sharePath + path
         try:
-            self.imgnames = _dircache[self.abspath]
+            self.imgfiles = _dircache[self.abspath]
         except KeyError:
-            self.imgnames = None
+            self.imgfiles = None
 
     def getDisplayInfo(self):
         return {"type": "Gallery"}
     
     def getMemberNames(self):
-        if self.imgnames is None:
-            nurl = self.url.replace(".html", ".js")
-            _logger.debug("gallery('%s')" % nurl)
-            jstr = urllib2.urlopen(nurl).read()
-            self.imgnames = PTN_IMAGE.findall(jstr)
-            _dircache[self.abspath] = self.imgnames
-        return self.imgnames
+        if self.imgfiles is None:
+            self.extractInfo()
+        return self.imgfiles.keys()
 
     def getMember(self, name):
-        return ImageFile(joinUri(self.path, name), self.environ, self.url)
+        if self.imgfiles is None:
+            self.extractInfo()
+        return ImageFile(joinUri(self.path, name), self.environ, self.imgfiles[name], self.url)
+
+    def extractInfo(self):
+        # host
+        gid = PTN_GALID.search(self.url).group(1)
+        _logger.debug("gallery('%s')" % gid)
+        #subdomain = chr(97+int(gid)%6)     # refer hitomi.la/download.js
+        if self.environ['hitomi.language'] == 'korean': subdomain = 'b'
+        elif self.environ['hitomi.language'] == 'english': subdomain = 'l'
+        else: subdomain = 'a'
+        baseurl = FILE_URL % (subdomain, gid)
+        # img files
+        nurl = self.url.replace('.html', '.js')
+        jstr = urllib2.urlopen(nurl).read()
+        self.imgfiles = PTN_IMAGE.findall(jstr)
+        self.imgfiles = OrderedDict([(name, baseurl+name) for name in PTN_IMAGE.findall(jstr)])
+        _dircache[self.abspath] = self.imgfiles
 
 
 #===============================================================================
@@ -218,10 +249,10 @@ class GalleryCollection(DAVCollection):
 #===============================================================================
 class ImageFile(DAVNonCollection):
     """Represents an image file."""
-    def __init__(self, path, environ, url):
+    def __init__(self, path, environ, url, refurl):
         DAVNonCollection.__init__(self, path, environ)
-        self.gallery = PTN_GALID.search(url).group(1)
-        self.refurl = url
+        self.url = url
+        self.refurl = refurl
 
     def getContentLength(self):
         return None
@@ -241,9 +272,8 @@ class ImageFile(DAVNonCollection):
         return False
 
     def getContent(self):
-        url = FILE_URL + self.gallery + "/" + self.name
-        _logger.debug("image('%s') in page('%s')" % (url, self.refurl))
-        req = urllib2.Request(url)
+        _logger.debug("image('%s') in page('%s')" % (self.url, self.refurl))
+        req = urllib2.Request(self.url)
         req.add_header('Referer', self.refurl)
         return urllib2.urlopen(req)
 
@@ -252,8 +282,9 @@ class ImageFile(DAVNonCollection):
 # DAVProvider
 #===============================================================================
 class HitomiProvider(DAVProvider):
-    def __init__(self):
+    def __init__(self, language='all'):
         super(HitomiProvider, self).__init__()
+        self.language = language
 
     def getResourceInst(self, path, environ):
         _logger.info("getResourceInst('%s')" % path)
@@ -265,5 +296,6 @@ class HitomiProvider(DAVProvider):
             #del _dircache[npath]
             _dircache.__delete__(npath)
         _last_path = npath
+        environ['hitomi.language'] = self.language
         root = RootCollection(environ)
         return root.resolve("", path)

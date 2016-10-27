@@ -32,6 +32,7 @@ req_hdrs = {
 PTN_MAXPG   = re.compile('<a href="[^"]*p=(\d+)[^"]*"[^>]*> *<img src="[^"]*/lp.gif"')
 PTN_SRURL   = re.compile("goHref\('(.*?)'\)")
 PTN_ARCHIVE = re.compile("/archives/")
+PTN_SRSTYLE = re.compile("color: *rgb")
 PTN_IMGURL  = re.compile('data-src="(.*?)"')
 PTN_SUCURI  = re.compile("S\s*=\s*'([^']*)'")
 
@@ -82,6 +83,7 @@ class BoardCollection(DAVCollection):
             if tname == name:
                 url = ROOT_URL + "/?c=1/%d" % tid
                 url += "&sort=gid"
+                #url += "&sort=subject"
                 return ListPageCollection(joinUri(self.path, name), self.environ, url)
         _logger.error("unexpected member name, "+name)
         return None
@@ -106,7 +108,8 @@ class GenreCollection(DAVCollection):
     
     def getMember(self, name):
         url = ROOT_URL + "/?r=home&m=bbs&bid=manga&where=tag&keyword=G%3A"+name.replace("+", "%2B") 
-        url += "&sort=gid"
+        #url += "&sort=gid"
+        url += "&sort=subject"
         return ListPageCollection(joinUri(self.path, name), self.environ, url)
 
 
@@ -213,9 +216,12 @@ class SeriesCollection(DAVCollection):
         if self.episodes is None:
             self.extractInfo()
         try:
-            return EpisodeCollection(joinUri(self.path, name), self.environ, self.episodes[name])
+            url = self.episodes[name]
         except:
             return None
+	if '/archives/' in url:
+	    return EpisodeCollection(joinUri(self.path, name), self.environ, url)
+	return SeriesCollection(joinUri(self.path, name), self.environ, url)
 
     def extractInfo(self):
         _logger.debug(self.url)
@@ -228,12 +234,18 @@ class SeriesCollection(DAVCollection):
             title = unicode(node.text).encode('utf-8')
             url = node.get('href')
             self.episodes[title] = url
+        for node in soup.findAll('a', {'style':PTN_SRSTYLE}):
+            title = unicode(node.text).encode('utf-8')
+            url = node.get('href')
+            self.episodes[title] = url
         _dircache[self.abspath] = self.episodes
 
 
 class EpisodeCollection(DAVCollection):
     def __init__(self, path, environ, url):
         DAVCollection.__init__(self, path, environ)
+        url = url.replace("http://www.shencomics.com", "http://www.yuncomics.com")
+        url = url.replace("http://blog.yuncomics.com", "http://www.yuncomics.com")
         self.url = url
         self.abspath = self.provider.sharePath + path
         try:
@@ -267,11 +279,8 @@ class EpisodeCollection(DAVCollection):
         return ImageFile(joinUri(self.path, name), self.environ, url, self.url, self.cookie)
 
     def extractInfo(self):
-        url = self.url
-        url = url.replace("http://www.shencomics.com", "http://www.yuncomics.com")
-        url = url.replace("http://blog.yuncomics.com", "http://www.yuncomics.com")
-        _logger.debug(url)
-        req = urllib2.Request(url, headers=req_hdrs)
+        _logger.debug(self.url)
+        req = urllib2.Request(self.url, headers=req_hdrs)
         html = urllib2.urlopen(req).read()
         match = PTN_SUCURI.search(html)
         if match:
@@ -298,7 +307,7 @@ class ImageFile(DAVNonCollection):
     """Represents an image file."""
     def __init__(self, path, environ, url, refurl, cookie):
         DAVNonCollection.__init__(self, path, environ)
-        self.url = url
+        self.url = url.split('?')[0]
         self.refurl = refurl
         self.cookie = cookie
 
