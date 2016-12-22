@@ -18,8 +18,8 @@ _logger = util.getModuleLogger(__name__)
 from util import _dircache
 _last_path = None
 
-ROOT_URL = "https://hitomi.la"
-FILE_URL = "https://%s.hitomi.la/galleries/%s/"
+ROOT_URL = "http://hitomi.la"
+FILE_URL = "http://%s.hitomi.la/galleries/%s/"
 
 PTN_GALLERY = re.compile('<h1><a href=".*?(\d+)\.html">(.*?)</a></h1>')
 PTN_IMAGE   = re.compile('"name":"(.*?)"')
@@ -232,9 +232,9 @@ class GalleryCollection(DAVCollection):
         gid = PTN_GALID.search(self.url).group(1)
         _logger.debug("gallery('%s')" % gid)
         #subdomain = chr(97+int(gid)%6)     # refer hitomi.la/download.js
-        if self.environ['hitomi.language'] == 'korean': subdomain = 'b'
-        elif self.environ['hitomi.language'] == 'english': subdomain = 'l'
-        else: subdomain = 'a'
+        if self.environ['hitomi.language'] == 'korean': subdomain = 'ba'
+        elif self.environ['hitomi.language'] == 'english': subdomain = 'la'
+        else: subdomain = 'aa'
         baseurl = FILE_URL % (subdomain, gid)
         # img files
         nurl = self.url.replace('.html', '.js')
